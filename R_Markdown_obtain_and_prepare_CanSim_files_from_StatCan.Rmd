@@ -1,0 +1,275 @@
+---
+title: "Model and Data Exploration Standards in R with Markdown"
+author: "Dave Campbell"
+date: "11/01/2024"
+output: html_document
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+This document is meant to be part of a set of templates that showcase good coding and modern reproducibility practices, here using R and Markdown.   
+
+# Goal:
+This document is a template for using R Markdown and shows how to download and prepare StatCan data from CanSim tables.  Data is downloaded from the source, directly pulling data from its url.  For transparency and robustness to future dataset changes, variable names are cleaned so that columns can be called by name rather than location.  Values and column names are recoded into longer, more meaningful values.  This will ease the overhead of sharing data, code, and results because the data can be examined, manipulated, and filtered without constant reference to the metadata coding.  
+
+# Reproducible, transparent analysis
+
+Guidelines are independent of the software used but may vary depending on our collaborators / use case.  This document will focus on using [Markdown](https://www.markdownguide.org/cheat-sheet) with R, but the principles are universal across other languages and [Jupyter](http://datacamp-community-prod.s3.amazonaws.com/21fdc814-3f08-4aa9-90fa-247eedefd655) Notebooks.
+
+ Markdown (and Jupyter) is designed to work with different software engines.  Regardless of whether you are using R or python you can compile a Markdown document using the **knit** button (if using RStudio).  Software languages are defined in the code chunk.    Note that these are run independently and their environments are not shared even when using both languages in one Markdown document.  
+
+
+
+# Conventions for Writing Sharable Collaborative Code in Markdown or Notebooks.
+
+- Using a mix of comments, code and output will make it easier to follow, share with collaborators,  reproduce, and alter.
+
+- Make sure that variable names are well defined.  It's better for the sake of transferability between R and Python to use '\_' as a separator for long variable names although if using R '.' is also ok.
+
+- Keep your object and function names descriptive and make sure your code names are consistent with the comment descriptions.
+
+- It's often infeasible to show all the variables from a big data table, but it is still useful to show a few data rows and columns.
+
+- Align your code vertically so that differences between similar lines stand out.
+
+- Document your data for reproducibility and trustworthy analysis.
+
+- Automate as much as possible to avoid errors and to ensure transparency.  This will also simplify making changes in future.
+
+- Consider making single purpose Markdown file and clarify the goal at the top of the document.  
+
+- Save output (data?) at the end of the document and name the file similar to the name of the Markdown document so that the creation and result are clearly linked.
+
+- It's generally better practice to spit large projects into bite sized pieces.  In some cases that will be functions, in other cases it will be Markdown documents with a single focus such as loading, exploring, or analyzing data.
+
+
+There are many other tricks that we'll use along the way depending on the goal of the code and audience but everything from here up sets a minimum standard for transparency and reproducibility.
+
+
+
+# Going Futher and an Example
+
+
+## Setting up the environment
+
+For transparency, print the version for the software at the top of the document. 
+
+```{r Rversion}
+#using R:
+version
+```
+
+
+Load libraries at the top of the document.  It helps the user to make sure that all libraries are installed and will help us to make sure the code will run on a different machine. It's nice to say something about the library.
+
+```{r library, warning = FALSE, message = FALSE}
+#using R:
+library(tidyverse)  # data manipulation and piping
+library(data.table) # renaming columns in bulk using 'setnames'
+library(plyr)       # recoding factor levels using 'mapvalues'  
+
+
+# install libraries if needed using
+# install.packages("tidyverse")
+# install.packages("data.table")
+# install.packages("plyr")
+```
+
+
+
+### Code chunks
+ The general format for code chunks is to specify the code engine (here, R or python), then name the chunk to make it easier to diagnose problems.  After that logical inputs that I use a lot include *eval* (run / don't run the code), *warning* (show/hide warnings), *message* (show/hide other output messages), *cache* (save the output so that the code will not be run next time if nothing has changed).  You can see some of these in the first line of the above R chunk, though these options are only viewable in the Rmd file and will not be viewable in the html rendered version.
+
+
+### Data Usage
+
+Data needs to be well documented.  Report the data provider, url, and date of retrieval. 
+
+
+When possible your code should read directly from the original data source rather than a local file.  However, when this is not reasonable include instructions for data acquisition.  In that case a strong option is to set up a Markdown or Jupyter document focusing solely on data acquisition steps and use separate file(s) showcasing data modelling while loading the data from a local (shared?) directory.  One way to stay organized is to prefix the Markdown files and their saved output with a number indicating the order in which files are to be run sequentially.
+
+### Example Data Documentation and Direct Data Download Using R.
+
+
+Here we use the monthly **Labour Force Survey Public Use Microfile** from [StatCan](https://www150.statcan.gc.ca/n1/pub/71m0001x/71m0001x2021001-eng.htm). This file directly downloads a zip file from Statistics Canada.  We need to extract both the metadata and csv datafile.
+
+To save time in compiling markdown, use **cache=TRUE** in initializing a code chunk.  In Jupyter notebooks you can cache output by setting the [configurations](https://jupyterbook.org/content/execute.html#caching-the-notebook-execution)
+
+
+### Loading the data
+
+The Labour Force Survey (LFS) will be downloaded directly from StatCan.  Eventually this code might be put into a loop that will cycle over *year* and *month*, so the code is written without hard coding in these values.  This also makes it easy to recycle these values when saving the cleaned data, so that changes early on in the document propagate through to the output.
+Note that in the Rmd code chunks, the argument _cache=TRUE_ is used so that the output at the end of the chunk is saved.  Next time the file is compiled it will load the chunk output rather than run the chunk and re-download the data file.
+
+
+
+```{r, cache = TRUE,  message = FALSE, warning=FALSE}
+
+# make a temp file
+temp <- tempfile()
+#Construct the url.  The 'month' and 'year' values will be recycled at the end of this document when saving the output.
+year  = "2021"
+month = "09"
+url = paste0("https://www150.statcan.gc.ca/n1/en/pub/71m0001x/2021001/",year,"-",month,"-CSV.zip")
+
+
+download.file(url,temp) # download the file from the url into the temp file
+(file_list <- as.character(unzip(temp, list = TRUE)$Name)) #list = TRUE <-- list the files but do not exract them
+
+# extract the metadata
+lfs_meta_data <- read_csv(unz(temp, file_list[1]),skip = 1, col_names = FALSE) 
+# Here I skip the first line since it contains '\' which is read as an invalid character. 
+# Since I've skipped the column names in the csv I tell it not to make column names
+
+lfs_data      <- read_csv(unz(temp, file_list[3])) |>
+  rename_all(make.names) # rebuild names so that column names no longer include spaces and non-alphanumeric characters
+
+unlink(temp) # delete the temp file
+
+# showing the data files
+# meta data file:
+lfs_meta_data |> head()
+# datafile is painfully unreadable because of variable names and coding
+# See especially, the city CMA or province PROV
+lfs_data |> glimpse()
+
+
+```
+
+### Recoding variables to make them easier to interpret and less likely to introduce errors later in analyses
+
+Locations such as province and CMA are coded numerically, so to avoid errors later on recode them into human interpretable values.  This step makes data and code more readable and easier to verify.  
+
+Start with building a dictionary mapping original harder to interpret encodings into more readable encodings. Creating a data disctionary also improves error checking by keeping track of the mapping from the original to our modified values. This is built by populating the mapping from values in the metadata. At this stage the metadata variables are not well named so we do need to call them by column location.  This is not robust to changes in the metadata formatting and does require openning the metadata using: 
+
+**lfs_meta_data |> View()**
+
+or by openning it in Excel.
+
+From there the data recoding is done automatically.  Some cleaning is performed to make the coded location names easier to handle by removing spaces, accents, and formatting.
+
+```{r recoding}
+
+# recode province and CMA by extracting coding from the metadata by first finding where in the metadata file the codings are kept:
+province_index = which(str_detect(lfs_meta_data$X5, pattern = "prov"))
+cma_index      = which(str_detect(lfs_meta_data$X5, pattern = "cma"))
+
+province_codings = tibble(old_names = as.numeric(lfs_meta_data$X12[province_index+c(1:10)]),
+                         new_names = lfs_meta_data$X13[province_index+c(1:10)])
+
+cma_codings      = tibble(old_names = as.numeric(lfs_meta_data$X12[cma_index+c(1:10)]),
+                         new_names = lfs_meta_data$X13[cma_index+c(1:10)])
+
+#We can check that the extracted results make sense by uncommenting the province_codings on the next line, but to keep the document clean we will focus on the more challenging CMAs.
+
+# province_codings
+cma_codings
+
+# We can also clean up the poor encoding of accent letters or deal with spaces
+# This may feel excessive so it's mostly to show how to do this via regex:
+
+cma_codings = cma_codings |> 
+  # swap "é" with "e" in case this causes problems for my English keyboard later.
+  mutate(new_names = str_replace_all(new_names, pattern = "\xe9", 
+                                                replacement = "e")) |> 
+  # spaces, punctuation or badly encoded slashes.
+  mutate(new_names = str_replace_all(new_names, pattern = "\\s|[[:punct:]]|(\x96)", 
+                                                replacement = "_")) 
+
+province_codings = province_codings |> 
+  # replace spaces in province names with underscores
+  mutate(new_names = str_replace_all(new_names, pattern = "\\s",                     
+                                                replacement = "_"))
+
+
+#The dictionary of the location variables is now less likely to introduce errors later on (again to keep the document clean we will just look at the CMAs):
+
+#province_codings
+cma_codings
+
+# Now onto recoding provinces and cmas in the LFS data using the dictionaries:
+lfs_data = lfs_data |>
+  mutate(PROV = plyr::mapvalues(PROV, 
+         from = province_codings$old_names, 
+         to   = province_codings$new_names)) |>
+  mutate(CMA = plyr::mapvalues(CMA,   
+        from = cma_codings$old_names,      
+          to = cma_codings$new_names))
+
+# finally look at a few values of the newly recoded variables
+lfs_data |> 
+  select(PROV, CMA) |>
+  unique() |>
+  head()
+
+```
+
+
+
+
+
+### Making more descriptive variable names from metadata.
+
+This subsection focuses on ensuring meaningful column names.  The readability could further be improved by recoding but whether or not it is worthwhile to extract more meaningful names from the metadata file depends on the use case, next steps, and collaborators...
+
+Note that in this case recoding variables from their metadata descriptions would lead to non-unique variable names, so here we use a combination of the original non-descriptive names and the metadata descriptions.  While this results in long names, they are very informative and readable.
+Again we need to look at the metadata to find the data mapping from coded to readable, informative, and sharable variable names. 
+
+
+
+```{r recodevariablenames}
+
+# build a mapping from old names to the more descriptive names from the metadata:
+new_variable_name_recodings = lfs_meta_data |> 
+  mutate(old_name = toupper(X5), 
+         new_name = str_replace_all(toupper(X6), pattern = "\\s+|[:punct:]+",replacement = "_")) |>
+  select(old_name, new_name) |> 
+  drop_na()
+
+
+
+# change the variable names to (longer) more descriptive names
+setnames( lfs_data,
+  old = new_variable_name_recodings$old_name, 
+  new = paste(new_variable_name_recodings$old_name,
+              new_variable_name_recodings$new_name, sep="."),
+  skip_absent = TRUE)
+
+
+
+
+# this makes the data file much more readable, although longer:
+lfs_data |> glimpse()
+
+
+```
+
+
+## Saving output
+
+Name the output file based on the file name of the Markdown document.  That way the file used to create the data can be clearly found from the datafile.  This also allows datafiles and code used to create those datafiles to group nicely when sorted.  Here, a descriptive name is constructed including the year = `r print(year)` and month = `r print(month)` attributes  defined at the start of the file.  Changes to month and year will then propagate through the document and into the output.  In the Rmd document you can also see the code used for displaying **inline R output**.
+
+```{r savingoutput}
+
+# construct a file name that is both descriptive and based on the name of the file used to construct and manipulate the data.
+# save the code in an R friendly format:
+save(lfs_data, file = paste0("R_Markdown_obtain_and_prepare_CanSim_files_from_StatCan-",year,"-",month,".Rdata"))
+#save the code in a more general csv format
+lfs_data |> write_csv(file = paste0("R_Markdown_obtain_and_prepare_CanSim_files_from_StatCan-",year,"-",month,".csv"))
+
+
+```
+
+
+
+# This file could also be converted into a script
+
+It is useful to use Markdown when piloting code, but larger jobs may need to be sent to a high performance compute cluster as a script.
+Convert this markdown into a script by running this line:
+```{r, eval = FALSE}
+knitr::purl("R_Markdown_obtain_and_prepare_CanSim_files_from_StatCan.Rmd")
+```
+

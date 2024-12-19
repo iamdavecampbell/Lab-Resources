@@ -5,12 +5,6 @@ date: "2024-12-19"
 output: html_document
 ---
 
-```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
-```
-
-\tableofcontents
-
 
 
 ## Github

@@ -7,9 +7,7 @@ output: html_document
 
 ## Files:
 
-- **Tech Stack.md** outlines the required tech stack.
-- **More Tools.md** outlines additional resources and tools.
-- **Expectations.md** outlines expectations for lab members.
+- Lab manual is now on Overleaf
 
 Coding conventions and best practices:
 
